@@ -2,6 +2,8 @@
 #include "bmi160.h"
 #include "lcd_display.h"
 #include "ble_service.h"
+#include "ble_nus.h"
+#include "ble_hrs.h"
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
@@ -132,7 +134,16 @@ void display_thread(void *arg1, void *arg2, void *arg3)
 void main(void) 
 {
     // Initialize Bluetooth
-    ble_init();
+//     ble_init();
+//     if (ble_nus_init() != 0) {
+//         printk("Failed to initialize BLE NUS\n");
+//         return;
+//     }
+
+    if (ble_hrs_init() != 0) {
+        printk("Failed to initialize BLE HRS!\n");
+        return;
+    }
 
     printk("MAX30101 Heart Rate Monitor with BMI160\n");
     
@@ -172,29 +183,30 @@ void main(void)
                         struct display_data display_data = {0};
                         static int last_hr = 0;
                         static uint32_t last_steps = 0;
-                    
+                
                         if (k_msgq_get(&hr_msgq, &heart_rate, K_NO_WAIT) == 0) {
                             printk("HR: %d bpm\n", heart_rate);
                             display_data.hr = heart_rate;
                         }
-                    
+                
                         if (k_msgq_get(&step_msgq, &step_data, K_NO_WAIT) == 0) {
                             printk("Steps: %u\n", step_data.steps);
                             display_data.steps = step_data.steps;
                         }
-                    
+                
                         if (display_data.hr != 0 || display_data.steps != 0) {
                             k_msgq_put(&display_msgq, &display_data, K_NO_WAIT);
-                    
+                
                             // BLE slanje ako se promenio HR ili broj koraka
                             if (display_data.hr != last_hr || display_data.steps != last_steps) {
-                                ble_send_data(display_data.hr, display_data.steps);
+                                ble_nus_send_data(display_data.hr, display_data.steps);
+                                ble_hrs_update(display_data.hr);
                                 last_hr = display_data.hr;
                                 last_steps = display_data.steps;
                             }
                         }
-                    
+                
                         k_sleep(K_MSEC(100));
                     }
-                    
+
 }
