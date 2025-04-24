@@ -1,6 +1,7 @@
 #include "max30101.h"
 #include "bmi160.h"
 #include "lcd_display.h"
+#include "ble_service.h"
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
@@ -9,6 +10,8 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/display.h>
 #include <zephyr/sys/printk.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/hci.h>
 
 #define BUFFER_SIZE 500
 static uint32_t ir_buffer[BUFFER_SIZE];
@@ -128,6 +131,9 @@ void display_thread(void *arg1, void *arg2, void *arg3)
 
 void main(void) 
 {
+    // Initialize Bluetooth
+    ble_init();
+
     printk("MAX30101 Heart Rate Monitor with BMI160\n");
     
     const struct device *i2c_dev = DEVICE_DT_GET(DT_NODELABEL(i2c0));
@@ -160,28 +166,35 @@ void main(void)
                    NULL, NULL, NULL,
                    4, 0, K_NO_WAIT);  // Higher priority than sensor threads
 
-    while (1) {
-        int heart_rate;
-        struct step_data step_data;
-        struct display_data display_data = {0};
-
-        // Process heart rate data
-        if (k_msgq_get(&hr_msgq, &heart_rate, K_NO_WAIT) == 0) {
-            printk("HR: %d bpm\n", heart_rate);
-            display_data.hr = heart_rate;
-        }
-
-        // Process step data
-        if (k_msgq_get(&step_msgq, &step_data, K_NO_WAIT) == 0) {
-            printk("Steps: %u\n", step_data.steps);
-            display_data.steps = step_data.steps;
-        }
-
-        // Send data to display thread if we have updates
-        if (display_data.hr != 0 || display_data.steps != 0) {
-            k_msgq_put(&display_msgq, &display_data, K_NO_WAIT);
-        }
-
-        k_sleep(K_MSEC(100));
-    }
+                   while (1) {
+                        int heart_rate;
+                        struct step_data step_data;
+                        struct display_data display_data = {0};
+                        static int last_hr = 0;
+                        static uint32_t last_steps = 0;
+                    
+                        if (k_msgq_get(&hr_msgq, &heart_rate, K_NO_WAIT) == 0) {
+                            printk("HR: %d bpm\n", heart_rate);
+                            display_data.hr = heart_rate;
+                        }
+                    
+                        if (k_msgq_get(&step_msgq, &step_data, K_NO_WAIT) == 0) {
+                            printk("Steps: %u\n", step_data.steps);
+                            display_data.steps = step_data.steps;
+                        }
+                    
+                        if (display_data.hr != 0 || display_data.steps != 0) {
+                            k_msgq_put(&display_msgq, &display_data, K_NO_WAIT);
+                    
+                            // BLE slanje ako se promenio HR ili broj koraka
+                            if (display_data.hr != last_hr || display_data.steps != last_steps) {
+                                ble_send_data(display_data.hr, display_data.steps);
+                                last_hr = display_data.hr;
+                                last_steps = display_data.steps;
+                            }
+                        }
+                    
+                        k_sleep(K_MSEC(100));
+                    }
+                    
 }
