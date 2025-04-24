@@ -1,6 +1,187 @@
+#include "max30101.h"
+#include "bmi160.h"
+#include "lcd_display.h"
 #include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/sensor.h>
+#include <stdio.h>
+#include <string.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/drivers/display.h>
+#include <zephyr/sys/printk.h>
 
-int main(void)
+#define BUFFER_SIZE 500
+static uint32_t ir_buffer[BUFFER_SIZE];
+static int buffer_index = 0;
+
+// Thread stacks and control structures
+K_THREAD_STACK_DEFINE(max30101_thread_stack, 5000);
+K_THREAD_STACK_DEFINE(bmi160_thread_stack, 5000);
+K_THREAD_STACK_DEFINE(display_thread_stack, 4096);  // Increased stack for display
+static struct k_thread max30101_thread_data;
+static struct k_thread bmi160_thread_data;
+static struct k_thread display_thread_data;
+
+// Message queues
+K_MSGQ_DEFINE(hr_msgq, sizeof(int), 10, 4);
+
+struct step_data {
+    uint16_t steps;
+    struct sensor_value accel[3];
+};
+K_MSGQ_DEFINE(step_msgq, sizeof(struct step_data), 10, 4);
+
+// Display data structure
+struct display_data {
+    uint32_t hr;
+    uint32_t steps;
+};
+K_MSGQ_DEFINE(display_msgq, sizeof(struct display_data), 10, 4);
+
+void max30101_thread(void *arg1, void *arg2, void *arg3)
 {
-        return 0;
+    ARG_UNUSED(arg1);
+    ARG_UNUSED(arg2);
+    ARG_UNUSED(arg3);
+
+    while (1) {
+        uint32_t ir;
+        if (max30101_read_ir_sample(&ir) == 0) {
+            ir_buffer[buffer_index++] = ir;
+
+            if (buffer_index >= BUFFER_SIZE) {
+                int delta = count_peaks(ir_buffer, BUFFER_SIZE);
+                int heart_rate = 0;
+
+                if (delta <= 0) {
+                    printk("Finger removed\n");
+                } else {
+                    heart_rate = (60 * 100) / delta;
+                    if(heart_rate > 40) {
+                        k_msgq_put(&hr_msgq, &heart_rate, K_NO_WAIT);
+                    }
+                }
+                buffer_index = 0;
+            }
+        }
+        k_sleep(K_MSEC(10));
+    }
+}
+
+void bmi160_thread(void *arg1, void *arg2, void *arg3)
+{
+    ARG_UNUSED(arg1);
+    ARG_UNUSED(arg2);
+    ARG_UNUSED(arg3);
+    
+    const struct device *sensor = DEVICE_DT_GET_ONE(bosch_bmi160);
+    if (!device_is_ready(sensor)) {
+        printk("BMI160 device not ready\n");
+        return;
+    }
+
+    if (bmi160_enable_step_counter() != 0) {
+        printk("Failed to enable step counter\n");
+        return;
+    }
+
+    while (1) {
+        uint16_t steps = 0;
+        struct sensor_value accel[3];
+        struct step_data step_data;
+
+        if (sensor_sample_fetch(sensor) == 0) {
+            if (sensor_channel_get(sensor, SENSOR_CHAN_ACCEL_XYZ, accel) == 0) {
+                if (bmi160_read_step_count(&steps) == 0) {
+                    step_data.steps = steps;
+                    memcpy(step_data.accel, accel, sizeof(accel));
+                    k_msgq_put(&step_msgq, &step_data, K_NO_WAIT);
+                }
+            }
+        }
+        k_sleep(K_MSEC(1000));
+    }
+}
+
+void display_thread(void *arg1, void *arg2, void *arg3)
+{
+    ARG_UNUSED(arg1);
+    ARG_UNUSED(arg2);
+    ARG_UNUSED(arg3);
+
+    // Initialize display
+    init_lcd_display();
+    
+    struct display_data data = {0};
+    
+    while (1) {
+        // Get new data from queue with timeout
+        if (k_msgq_get(&display_msgq, &data, K_MSEC(100)) == 0) {
+            update_lcd_display(data.hr, data.steps);
+        }
+        
+        // Always refresh the display periodically
+        lv_task_handler();
+        k_sleep(K_MSEC(50));  // Refresh at ~20Hz
+    }
+}
+
+void main(void) 
+{
+    printk("MAX30101 Heart Rate Monitor with BMI160\n");
+    
+    const struct device *i2c_dev = DEVICE_DT_GET(DT_NODELABEL(i2c0));
+    if (!device_is_ready(i2c_dev)) {
+        printk("I2C for MAX not ready!\n");
+        return;
+    }
+
+    if (max30101_init(i2c_dev) != 0) {
+        printk("Sensor init failed!\n");
+        return;
+    }
+
+    // Create threads
+    k_thread_create(&max30101_thread_data, max30101_thread_stack,
+                   K_THREAD_STACK_SIZEOF(max30101_thread_stack),
+                   max30101_thread,
+                   NULL, NULL, NULL,
+                   5, 0, K_NO_WAIT);
+
+    k_thread_create(&bmi160_thread_data, bmi160_thread_stack,
+                   K_THREAD_STACK_SIZEOF(bmi160_thread_stack),
+                   bmi160_thread,
+                   NULL, NULL, NULL,
+                   5, 0, K_NO_WAIT);
+
+    k_thread_create(&display_thread_data, display_thread_stack,
+                   K_THREAD_STACK_SIZEOF(display_thread_stack),
+                   display_thread,
+                   NULL, NULL, NULL,
+                   4, 0, K_NO_WAIT);  // Higher priority than sensor threads
+
+    while (1) {
+        int heart_rate;
+        struct step_data step_data;
+        struct display_data display_data = {0};
+
+        // Process heart rate data
+        if (k_msgq_get(&hr_msgq, &heart_rate, K_NO_WAIT) == 0) {
+            printk("HR: %d bpm\n", heart_rate);
+            display_data.hr = heart_rate;
+        }
+
+        // Process step data
+        if (k_msgq_get(&step_msgq, &step_data, K_NO_WAIT) == 0) {
+            printk("Steps: %u\n", step_data.steps);
+            display_data.steps = step_data.steps;
+        }
+
+        // Send data to display thread if we have updates
+        if (display_data.hr != 0 || display_data.steps != 0) {
+            k_msgq_put(&display_msgq, &display_data, K_NO_WAIT);
+        }
+
+        k_sleep(K_MSEC(100));
+    }
 }

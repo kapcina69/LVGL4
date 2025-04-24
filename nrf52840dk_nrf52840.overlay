@@ -1,0 +1,74 @@
+
+/ {
+    compatible = "nordic,nrf52840-dk-nrf52840";
+
+    chosen {
+        zephyr,display = &ssd1306;
+    };
+
+    aliases {
+        max30101 = &max30101;
+        bmi160 = &bmi160;
+    };
+};
+
+&i2c0 {
+    status = "okay";
+    pinctrl-0 = <&i2c0_default>;
+    pinctrl-1 = <&i2c0_sleep>;
+    pinctrl-names = "default", "sleep";
+    clock-frequency = <I2C_BITRATE_FAST>;
+
+    /* BMI160 IMU */
+    bmi160: bmi160@69 {
+        compatible = "bosch,bmi160";
+        reg = <0x69>;
+        label = "BMI160";
+        /* Dodajte ove linije ako koristite interapt pinove */
+        int-gpios = <&gpio0 23 GPIO_ACTIVE_HIGH>;  /* Proverite tačan pin na vašoj ploči */
+    };
+
+    /* MAX30101 Pulse Oximeter */
+    max30101: max30101@57 {
+        compatible = "maxim,max30101";
+        reg = <0x57>;
+        label = "MAX30101";
+        /* Opciono: ako koristite interapt pin */
+        // int-gpios = <&gpio0 24 GPIO_ACTIVE_HIGH>;
+    };
+
+    /* SSD1306 OLED Display */
+    ssd1306: ssd1306@3c {
+        compatible = "solomon,ssd1306fb";
+        reg = <0x3c>;
+        label = "SSD1306";
+        width = <128>;
+        height = <64>;
+        segment-offset = <0>;
+        page-offset = <0>;
+        display-offset = <0>;
+        multiplex-ratio = <63>;
+        segment-remap;
+        com-invdir;
+        prechargep = <0x22>;
+        reset-gpios = <&gpio0 22 GPIO_ACTIVE_LOW>;
+    };
+};
+
+&pinctrl {
+    i2c0_default: i2c0_default {
+        group1 {
+            psels = <NRF_PSEL(TWIM_SDA, 0, 26)>,
+                    <NRF_PSEL(TWIM_SCL, 0, 27)>;
+            bias-pull-up;
+        };
+    };
+
+    i2c0_sleep: i2c0_sleep {
+        group1 {
+            psels = <NRF_PSEL(TWIM_SDA, 0, 26)>,
+                    <NRF_PSEL(TWIM_SCL, 0, 27)>;
+            low-power-enable;
+        };
+    };
+};
