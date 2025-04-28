@@ -71,4 +71,6 @@ int ble_nus_send_data(int heart_rate, uint32_t steps)
     }
 
     return bt_nus_send(NULL, buffer, len);
+    
 }
+

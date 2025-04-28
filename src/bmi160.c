@@ -36,7 +36,7 @@ int bmi160_read_step_count(uint16_t *steps)
 int bmi160_enable_step_counter(void)
 {
     uint8_t step_conf0 = 0x15;  // Default config
-    uint8_t step_conf1 = 0x03;  // Enable step counter
+    uint8_t step_conf1 = 0x0b;  // Enable step counter
 
     if (!device_is_ready(i2c_dev2)) {
         printk("I2C device not ready!\n");

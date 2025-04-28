@@ -4,6 +4,7 @@
 
     chosen {
         zephyr,display = &ssd1306;
+        zephyr,rtc = &rtc0;  // Koristi RTC0 periferiju
     };
 
     aliases {
@@ -71,4 +72,10 @@
             low-power-enable;
         };
     };
+};
+
+&rtc0 {
+    status = "okay";
+    compatible = "nordic,nrf-rtc";
+    clock-frequency = <32768>;
 };
