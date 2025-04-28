@@ -8,6 +8,10 @@
 #include <zephyr/drivers/display.h>
 #include <zephyr/logging/log.h>
 #include <time.h>
+#include <sprite_heart.h>
+#include <shoe.h>
+
+
 
 LOG_MODULE_REGISTER(display_app);
 
@@ -24,6 +28,11 @@ static lv_obj_t *time_label = NULL;
 static display_view_t current_view = DISPLAY_HR;
 static lv_timer_t *display_timer = NULL;
 static lv_timer_t *time_update_timer = NULL;  // Dodat tajmer za ažuriranje vremena
+static lv_obj_t *hr_icon = NULL;
+static lv_obj_t *steps_icon = NULL;
+
+
+
 
 void init_lcd_display(void);
 void update_lcd_display(uint32_t hr, uint32_t steps);
@@ -60,7 +69,20 @@ void init_lcd_display(void)
     lv_label_set_text(time_label, "Time: --");
     lv_obj_add_flag(time_label, LV_OBJ_FLAG_HIDDEN);
 
-    display_timer = lv_timer_create(switch_display_view, 8000, NULL);
+        // HR ikonica
+        hr_icon = lv_img_create(lv_scr_act());
+        lv_img_set_src(hr_icon, &Sprite_heart);
+        lv_obj_align(hr_icon, LV_ALIGN_CENTER, -30, -20); // Podesi poziciju ručno
+        lv_obj_align(hr_label, LV_ALIGN_CENTER, 20, -20);
+    
+       // Steps ikonica
+       steps_icon = lv_img_create(lv_scr_act());
+       lv_img_set_src(steps_icon, &icons8_shoe_print_30);
+       lv_obj_align(steps_icon, LV_ALIGN_CENTER, -40, -10); 
+       lv_obj_add_flag(steps_icon, LV_OBJ_FLAG_HIDDEN); // Na početku sakrij
+
+
+    display_timer = lv_timer_create(switch_display_view, 3000, NULL);
     time_update_timer = lv_timer_create(update_time_callback, 1000, NULL);  // Ažuriraj vreme svake sekunde
 
     lv_task_handler();
@@ -69,8 +91,8 @@ void init_lcd_display(void)
 
 void update_lcd_display(uint32_t hr, uint32_t steps)
 {
-    char hr_text[32];
-    char steps_text[32];
+    char hr_text[64];
+    char steps_text[64];
     
     if (hr != 0) {
         snprintf(hr_text, sizeof(hr_text), "HR: %d", hr);
@@ -84,6 +106,7 @@ void update_lcd_display(uint32_t hr, uint32_t steps)
     
     lv_task_handler();
 }
+
 
 // Nova funkcija koja se poziva svake sekunde da ažurira vreme
 void update_time_callback(lv_timer_t *timer)
@@ -100,9 +123,13 @@ void switch_display_view(lv_timer_t *timer)
     switch (current_view) {
         case DISPLAY_HR:
             lv_obj_add_flag(hr_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(hr_icon, LV_OBJ_FLAG_HIDDEN);
+
             break;
         case DISPLAY_STEPS:
             lv_obj_add_flag(steps_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(steps_icon, LV_OBJ_FLAG_HIDDEN);
+
             break;
         case DISPLAY_TIME:
             lv_obj_add_flag(time_label, LV_OBJ_FLAG_HIDDEN);
@@ -118,9 +145,12 @@ void switch_display_view(lv_timer_t *timer)
     switch (current_view) {
         case DISPLAY_HR:
             lv_obj_clear_flag(hr_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(hr_icon, LV_OBJ_FLAG_HIDDEN);
+
             break;
         case DISPLAY_STEPS:
             lv_obj_clear_flag(steps_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(steps_icon, LV_OBJ_FLAG_HIDDEN);
             break;
         case DISPLAY_TIME:
             lv_obj_clear_flag(time_label, LV_OBJ_FLAG_HIDDEN);

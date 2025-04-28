@@ -17,6 +17,7 @@
 #include <zephyr/bluetooth/hci.h>
 #include <time.h>
 
+
 #define BUFFER_SIZE 500
 static uint32_t ir_buffer[BUFFER_SIZE];
 static int buffer_index = 0;
