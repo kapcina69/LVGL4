@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <bluetooth/services/nus.h>
 #include <zephyr/bluetooth/hci.h>
+#include "lcd_display.h"
 
 
 /* Connection callbacks structure */
@@ -34,6 +35,7 @@ void connected(struct bt_conn *conn, uint8_t err)
 {
     if (err == 0) {
         printk("Connected\n");
+        lv_obj_clear_flag(bt_label, LV_OBJ_FLAG_HIDDEN);  // Prikazi BT simbol
     } else {
         printk("Connection failed (err %u)\n", err);
     }
@@ -42,7 +44,9 @@ void connected(struct bt_conn *conn, uint8_t err)
 void disconnected(struct bt_conn *conn, uint8_t reason)
 {
     printk("Disconnected (reason %u)\n", reason);
+    lv_obj_add_flag(bt_label, LV_OBJ_FLAG_HIDDEN);  // Sakrij BT simbol
 }
+
 
 int ble_nus_init(void)
 {

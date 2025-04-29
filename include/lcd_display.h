@@ -5,6 +5,8 @@
 
 extern lv_obj_t *hr_label;
 extern lv_obj_t *steps_label;
+extern lv_obj_t *bt_label;
+
 
 void init_lcd_display(void);
 void update_lcd_display(uint32_t hr, uint32_t steps);

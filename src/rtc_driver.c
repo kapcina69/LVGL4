@@ -67,12 +67,11 @@ void rtc_set_initial_time(const char *data)
 
 
 
-
 void rtc_update_time_label(lv_obj_t *time_label)
 {
     struct timespec ts;
-    char time_text[32];
-    
+    char time_text[48];
+
     if (clock_gettime(CLOCK_REALTIME, &ts) < 0) {
         printk("Failed to get time\n");
         lv_label_set_text(time_label, "Time error");
@@ -86,18 +85,28 @@ void rtc_update_time_label(lv_obj_t *time_label)
         return;
     }
 
+    static const char *weekday_names[] = {
+        "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
+    };
+
+    static const char *month_names[] = {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    };
+
     snprintf(time_text, sizeof(time_text),
-             "%04d-%02d-%02d\n%02d:%02d:%02d",
-             timeinfo->tm_year + 1900, // Godina je od 1900
-             timeinfo->tm_mon + 1,     // Mesec je 0-based (0 je januar)
+             "  %s, %02d %s %04d\n     %02d:%02d:%02d",
+             weekday_names[timeinfo->tm_wday],
              timeinfo->tm_mday,
+             month_names[timeinfo->tm_mon],
+             timeinfo->tm_year + 1900,
              timeinfo->tm_hour,
              timeinfo->tm_min,
              timeinfo->tm_sec);
 
-    // Update LVGL label
     lv_label_set_text(time_label, time_text);
-    
-    // Optional: Print to console for debugging
+    lv_obj_align(time_label, LV_ALIGN_CENTER, 0, 10);
+
     printk("Current time: %s\n", time_text);
 }
+
