@@ -5,7 +5,7 @@
 #include <zephyr/sys/printk.h>
 #include <string.h>
 #include <stdio.h>
-#include <rtc_driver.h>
+#include "rtc_driver.h"
 
 #include "ble_service.h"
 

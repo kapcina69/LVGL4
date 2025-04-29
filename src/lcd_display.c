@@ -8,8 +8,8 @@
 #include <zephyr/drivers/display.h>
 #include <zephyr/logging/log.h>
 #include <time.h>
-#include <sprite_heart.h>
-#include <shoe.h>
+#include "sprite_heart.h"
+#include "shoe.h"
 
 
 
@@ -104,7 +104,7 @@ void init_lcd_display(void)
     time_label = lv_label_create(lv_scr_act());
     lv_obj_add_style(time_label, &style, 0);
     lv_obj_align(time_label, LV_ALIGN_CENTER, 0,0);
-    lv_label_set_text(time_label, "Time: --");
+    lv_label_set_text(time_label, "");
     lv_obj_add_flag(time_label, LV_OBJ_FLAG_HIDDEN);
 
         // HR ikonica

@@ -56,11 +56,20 @@ struct bluetooth_data {
 };
 K_MSGQ_DEFINE(bluetooth_msgq, sizeof(struct bluetooth_data), 10, 4);
 
+
+
+
 void max30101_thread(void *arg1, void *arg2, void *arg3)
 {
     ARG_UNUSED(arg1);
     ARG_UNUSED(arg2);
     ARG_UNUSED(arg3);
+
+    #define HR_HISTORY_SIZE 10
+    static uint16_t hr_history[HR_HISTORY_SIZE];
+    static uint8_t hr_index = 0;
+    static bool hr_history_full = false;
+    static uint16_t avg_hr = 0;
 
     while (1) {
         uint32_t ir;
@@ -73,10 +82,67 @@ void max30101_thread(void *arg1, void *arg2, void *arg3)
 
                 if (delta <= 0) {
                     printk("Finger removed\n");
+
                 } else {
                     heart_rate = (60 * 100) / delta;
-                    if(heart_rate > 40) {
-                        k_msgq_put(&hr_msgq, &heart_rate, K_NO_WAIT);
+                    
+                    if(heart_rate > 40 && heart_rate < 200) {  // Valid HR range
+                        // Store HR in history
+                        hr_history[hr_index++] = heart_rate;
+                        
+                        // Check if history is full
+                        if (hr_index >= HR_HISTORY_SIZE) {
+                            hr_index = 0;
+                            hr_history_full = true;
+                        }
+                        
+                        // Calculate average HR
+                        if (hr_history_full) {
+                            uint16_t temp_array[HR_HISTORY_SIZE];
+                            memcpy(temp_array, hr_history, sizeof(hr_history));
+                            
+                            // Sort the array to easily find min/max values
+                            for (int i = 0; i < HR_HISTORY_SIZE-1; i++) {
+                                for (int j = i+1; j < HR_HISTORY_SIZE; j++) {
+                                    if (temp_array[i] > temp_array[j]) {
+                                        uint16_t temp = temp_array[i];
+                                        temp_array[i] = temp_array[j];
+                                        temp_array[j] = temp;
+                                    }
+                                }
+                            }
+                            uint32_t sum = 0;
+                            for (int i = 0; i < HR_HISTORY_SIZE; i++) {
+                                sum += hr_history[i];
+                            }
+                            avg_hr = sum / HR_HISTORY_SIZE;
+                            
+                            // Send both current and average HR
+                            struct hr_data {
+                                uint16_t current_hr;
+                                uint16_t average_hr;
+                            } hr_msg;
+                            
+                            hr_msg.current_hr = heart_rate;
+                            hr_msg.average_hr = avg_hr;
+                            
+                            k_msgq_put(&hr_msgq, &hr_msg.average_hr, K_NO_WAIT);
+                            
+                            printk("HR: %d (avg: %d)\n", heart_rate, avg_hr);
+                        } else {
+                            // Send only current HR until we have enough samples
+                            struct hr_data {
+                                uint16_t current_hr;
+                                uint16_t average_hr;
+                            } hr_msg;
+                            
+                            hr_msg.current_hr = heart_rate;
+                            hr_msg.average_hr = 0;  // Not available yet
+                            
+                            k_msgq_put(&hr_msgq, &hr_msg.current_hr, K_NO_WAIT);
+                            
+                            printk("HR: %d (collecting samples)\n", heart_rate);
+                        }
                     }
                 }
                 buffer_index = 0;
@@ -85,6 +151,10 @@ void max30101_thread(void *arg1, void *arg2, void *arg3)
         k_sleep(K_MSEC(10));
     }
 }
+
+
+
+
 
 void bmi160_thread(void *arg1, void *arg2, void *arg3)
 {
@@ -112,7 +182,6 @@ void bmi160_thread(void *arg1, void *arg2, void *arg3)
             if (sensor_channel_get(sensor, SENSOR_CHAN_ACCEL_XYZ, accel) == 0) {
                 if (bmi160_read_step_count(&steps) == 0) {
                     step_data.steps = steps;
-                    printk("Steps1: %u\n", steps);
                     memcpy(step_data.accel, accel, sizeof(accel));
                     k_msgq_put(&step_msgq, &step_data, K_NO_WAIT);
                 }
@@ -177,6 +246,11 @@ void handle_received_data(const char *data)
     value_nrf_connect=true;
     
 }
+
+
+
+
+
 
 void main(void) 
 {

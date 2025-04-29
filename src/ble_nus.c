@@ -1,4 +1,4 @@
-#include "ble_nus.h"
+#include <ble_nus.h>
 #include <zephyr/device.h>
 #include <zephyr/sys/printk.h>
 #include <string.h>

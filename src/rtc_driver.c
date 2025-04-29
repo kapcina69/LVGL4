@@ -67,46 +67,59 @@ void rtc_set_initial_time(const char *data)
 
 
 
-void rtc_update_time_label(lv_obj_t *time_label)
+void rtc_update_time_label(lv_obj_t *parent)
 {
     struct timespec ts;
-    char time_text[48];
-
     if (clock_gettime(CLOCK_REALTIME, &ts) < 0) {
         printk("Failed to get time\n");
-        lv_label_set_text(time_label, "Time error");
         return;
     }
 
     struct tm *timeinfo = gmtime(&ts.tv_sec);
     if (timeinfo == NULL) {
         printk("Failed to convert time\n");
-        lv_label_set_text(time_label, "Time error");
         return;
     }
 
     static const char *weekday_names[] = {
-        "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
+        "nedelja", "pon", "utorak", "sreda", "cetvrtak", "petak", "subota"
     };
 
     static const char *month_names[] = {
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+        "jan", "feb", "mar", "apr", "maj", "jun",
+        "jul", "avg", "sep", "okt", "nov", "dec"
     };
 
-    snprintf(time_text, sizeof(time_text),
-             "  %s, %02d %s %04d\n     %02d:%02d:%02d",
+    char time_buf[16];
+    char date_buf[32];
+
+    snprintf(time_buf, sizeof(time_buf), "%02d:%02d:%02d",
+             timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+
+    snprintf(date_buf, sizeof(date_buf), "%s, %02d %s %04d",
              weekday_names[timeinfo->tm_wday],
              timeinfo->tm_mday,
              month_names[timeinfo->tm_mon],
-             timeinfo->tm_year + 1900,
-             timeinfo->tm_hour,
-             timeinfo->tm_min,
-             timeinfo->tm_sec);
+             timeinfo->tm_year + 1900);
 
-    lv_label_set_text(time_label, time_text);
-    lv_obj_align(time_label, LV_ALIGN_CENTER, 0, 10);
+    // Create or update TIME label
+    static lv_obj_t *time_label = NULL;
+    if (!time_label) {
+        time_label = lv_label_create(parent);
+        lv_obj_set_style_text_font(time_label, &lv_font_montserrat_20, LV_PART_MAIN);
+    }
+    lv_label_set_text(time_label, time_buf);
+    lv_obj_align(time_label, LV_ALIGN_TOP_MID, 0, 10);
 
-    printk("Current time: %s\n", time_text);
+    // Create or update DATE label
+    static lv_obj_t *date_label = NULL;
+    if (!date_label) {
+        date_label = lv_label_create(parent);
+        lv_obj_set_style_text_font(date_label, &lv_font_montserrat_12, LV_PART_MAIN);
+    }
+    lv_label_set_text(date_label, date_buf);
+    lv_obj_align_to(date_label, time_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
+
+    printk("Vreme: %s | Datum: %s\n", time_buf, date_buf);
 }
 
