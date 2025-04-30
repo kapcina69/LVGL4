@@ -10,32 +10,76 @@
 #include <time.h>
 #include "sprite_heart.h"
 #include "shoe.h"
+#include <zephyr/sys/reboot.h>
 
 
 
 LOG_MODULE_REGISTER(display_app);
 
-typedef enum {
-    DISPLAY_HR,
-    DISPLAY_STEPS,
-    DISPLAY_TIME,
-    DISPLAY_COUNT
-} display_view_t;
+
 
 lv_obj_t *hr_label = NULL;
 lv_obj_t *steps_label = NULL;
-static lv_obj_t *time_label = NULL;
-static display_view_t current_view = DISPLAY_HR;
-static lv_timer_t *display_timer = NULL;
+lv_obj_t *time_label = NULL;
+display_view_t current_view;
+lv_timer_t *display_timer = NULL;
 static lv_timer_t *time_update_timer = NULL;  // Dodat tajmer za ažuriranje vremena
-static lv_obj_t *hr_icon = NULL;
-static lv_obj_t *steps_icon = NULL;
+lv_obj_t *hr_icon = NULL;
+lv_obj_t *steps_icon = NULL;
 static lv_obj_t *time_icon = NULL; 
 lv_obj_t *bt_label = NULL;
 static lv_obj_t *battery_label = NULL;
 static lv_timer_t *blink_timer;
 static bool hr_icon_visible = true;
+int display_timer_period = 3000; // Period za prebacivanje prikaza
 
+lv_obj_t *label; // globalni LVGL label
+
+// Asinhroni wrapper za bezbedno pozivanje iz timer callback-a
+static void switch_display_view_async(void *param)
+{
+    ARG_UNUSED(param); // Makro iz Zephyr/LVGL da izbegne warning
+    switch_display_view(NULL); // Poziva stvarnu funkciju
+}
+
+void timer_callback(lv_timer_t *timer)
+{
+    lv_async_call(switch_display_view_async, NULL);
+}
+
+
+
+void reset(void) {
+    lv_timer_pause(display_timer);
+    // Animate hiding of elements with fade-out effects
+    lv_obj_fade_out(hr_label, 1100, 0);
+    lv_obj_fade_out(hr_icon, 1000, 0);
+    stop_hr_icon_blinking();
+    
+    lv_obj_fade_out(steps_label, 1000, 0);
+    lv_obj_fade_out(steps_icon, 1000, 0);
+    
+    lv_obj_fade_out(time_label, 1000, 0);
+    k_sleep(K_MSEC(1000));
+    if (!label) {
+        label = lv_label_create(lv_scr_act());
+        lv_obj_align(label, LV_ALIGN_CENTER, 0, 20);  // Nešto ispod HR labela
+    }
+    
+    static const char *dots[] = {"", ".", "..", "..."};
+    for (int i = 0; i < 4; i++) {
+        lv_label_set_text_fmt(label, "Resetujem se%s", dots[i]);
+        lv_task_handler(); // osvežava LVGL GUI
+        k_sleep(K_MSEC(500));
+    }
+
+    lv_obj_add_flag(time_label, LV_OBJ_FLAG_HIDDEN);
+
+    lv_label_set_text(label, "Resetujem...");
+    lv_task_handler();
+    k_sleep(K_MSEC(1000));
+    sys_reboot(SYS_REBOOT_COLD);
+}
 
 
 
@@ -136,17 +180,63 @@ void init_lcd_display(void)
 
 
 
-    display_timer = lv_timer_create(switch_display_view, 3000, NULL);
+    display_timer = lv_timer_create(timer_callback, 3000, NULL);
     time_update_timer = lv_timer_create(update_time_callback, 1000, NULL);  // Ažuriraj vreme svake sekunde
 
     lv_task_handler();
     display_blanking_off(display_dev);
 }
 
+void change_display_view(char *message)
+{
+    printk("Funkcija pozvana sa porukom: %s\n", message);
+
+    // Proveri da li poruka počinje sa "displaytime:"
+    if (strncmp(message, "displaytime:", 12) != 0) {
+        printk("Greska: Poruka ne pocinje sa 'displaytime:'\n");
+        return;
+    }
+
+    printk("Prefiks je ispravan\n");
+
+    // Preskoči prefiks i proveri ostatak poruke
+    char *time_str = message + 12;
+    char *colon_check = strchr(time_str, ':');
+    
+    // Proveri da li postoji drugi dvotač i da li je na kraju
+    if (colon_check == NULL || *(colon_check + 1) != '\0') {
+        printk("Greska: Nedostaje drugi dvotack ili nije na kraju poruke\n");
+        return;
+    }
+
+    printk("Format poruke je ispravan\n");
+
+    // Konvertuj vreme u sekundama
+    *colon_check = '\0'; // Terminiraj string za atoi
+    int new_time_sec = atoi(time_str);
+    printk("Konvertovano vreme: %d sekundi\n", new_time_sec);
+    
+    // Proveri validnost vremena
+    if (new_time_sec <= 0) {
+        printk("Greska: Vreme mora biti pozitivan broj\n");
+        return;
+    }
+
+    printk("Postavljam novi period tajmera: %d ms\n", new_time_sec * 1000);
+    
+    // Postavi novi period (konvertuj sekunde u milisekunde)
+    lv_timer_set_period(display_timer, new_time_sec * 1000);
+    
+    // Resetuj tajmer da odmah počne sa novim intervalom
+    lv_timer_reset(display_timer);
+    printk("Tajmer uspesno azuriran\n");
+}
+
 void update_lcd_display(uint32_t hr, uint32_t steps)
 {
     char hr_text[64];
     char steps_text[64];
+    
 
 
     if (hr != 0) {
@@ -184,38 +274,27 @@ void update_time_callback(lv_timer_t *timer)
         lv_task_handler();  // Ažuriraj prikaz samo ako je vreme trenutno prikazano
     }
 }
-void switch_display_view(lv_timer_t *timer)
+// Pomoćna funkcija za sakrivanje svih elemenata
+static void hide_all_views(void)
 {
-    // Sakrij trenutni prikaz
-    switch (current_view) {
-        case DISPLAY_HR:
-            lv_obj_add_flag(hr_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(hr_icon, LV_OBJ_FLAG_HIDDEN);
-            stop_hr_icon_blinking();  // ← dodato
-            break;
+    lv_obj_add_flag(hr_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(hr_icon, LV_OBJ_FLAG_HIDDEN);
+    stop_hr_icon_blinking();
 
-        case DISPLAY_STEPS:
-            lv_obj_add_flag(steps_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(steps_icon, LV_OBJ_FLAG_HIDDEN);
-            break;
+    lv_obj_add_flag(steps_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(steps_icon, LV_OBJ_FLAG_HIDDEN);
 
-        case DISPLAY_TIME:
-            lv_obj_add_flag(time_label, LV_OBJ_FLAG_HIDDEN);
-            break;
+    lv_obj_add_flag(time_label, LV_OBJ_FLAG_HIDDEN);
+}
 
-        default:
-            break;
-    }
-
-    // Pređi na sledeći prikaz
-    current_view = (current_view + 1) % DISPLAY_COUNT;
-
-    // Prikaži novi prikaz
+// Pomoćna funkcija za prikaz trenutnog prikaza
+static void show_current_view(void)
+{
     switch (current_view) {
         case DISPLAY_HR:
             lv_obj_clear_flag(hr_label, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(hr_icon, LV_OBJ_FLAG_HIDDEN);
-            start_hr_icon_blinking();  // ← pokreće blikovanje samo kad je prikaz aktivan
+            start_hr_icon_blinking();
             break;
 
         case DISPLAY_STEPS:
@@ -226,10 +305,69 @@ void switch_display_view(lv_timer_t *timer)
         case DISPLAY_TIME:
             lv_obj_clear_flag(time_label, LV_OBJ_FLAG_HIDDEN);
             break;
+    }
+}
 
-        default:
-            break;
+// Verzija za timer callback
+void switch_display_view(lv_timer_t *timer)
+{
+    hide_all_views();
+    current_view = (current_view + 1) % DISPLAY_COUNT;
+    show_current_view();
+}
+
+// Pomoćna struktura za asinhroni prenos komande
+typedef struct {
+    char command[16]; // Dovoljno za "steps", "time", "hr"
+} DisplayCommand;
+
+static void set_display_view_async(void *param)
+{
+    DisplayCommand *cmd = (DisplayCommand *)param;
+
+    bool valid = true;
+
+    if (strcmp(cmd->command, "steps") == 0) {
+        current_view = DISPLAY_STEPS;
+    }
+    else if (strcmp(cmd->command, "time") == 0) {
+        current_view = DISPLAY_TIME;
+    }
+    else if (strcmp(cmd->command, "hr") == 0) {
+        current_view = DISPLAY_HR;
+    }
+    else {
+        valid = false;
     }
 
-    lv_task_handler();
+    if (valid) {
+        hide_all_views();
+        show_current_view();
+        lv_timer_reset(display_timer);
+    } else {
+        printf("Nepoznata komanda: %s\n", cmd->command); // opciono
+    }
+
+    free(cmd);
 }
+
+
+void set_display_view(const char *command)
+{
+    if (command == NULL) return;
+
+    if (strcmp(command, "slider") == 0) {
+        // Automatski mod - timer nastavlja da radi
+        return;
+    }
+
+    // Alociramo podatke za asinhroni poziv
+    DisplayCommand *cmd = malloc(sizeof(DisplayCommand));
+    if (cmd == NULL) return; // Fail safe
+
+    strncpy(cmd->command, command, sizeof(cmd->command) - 1);
+    cmd->command[sizeof(cmd->command) - 1] = '\0'; // Null-terminate
+
+    lv_async_call(set_display_view_async, cmd);
+}
+

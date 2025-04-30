@@ -11,5 +11,6 @@
 
 int bmi160_enable_step_counter(void);
 int bmi160_read_step_count(uint16_t *steps);
+int bmi160_reset_step_counter(void);
 
 #endif // BMI160_H_

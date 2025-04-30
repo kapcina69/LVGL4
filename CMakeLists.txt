@@ -10,3 +10,8 @@ include_directories(
 
 FILE(GLOB app_sources src/*.c)
 target_sources(app PRIVATE ${app_sources})
+target_sources(app PRIVATE
+    src/bluetooth/ble_hrs.c
+    src/bluetooth/ble_nus.c
+    src/bluetooth/ble_service.c
+)

@@ -2,6 +2,7 @@
 #include <zephyr/sys/printk.h>
 #include <time.h>
 #include <stdio.h>
+#include "bmi160.h"
 
 static const struct device *rtc_dev = DEVICE_DT_GET(DT_NODELABEL(rtc0));
 
@@ -95,6 +96,9 @@ void rtc_update_time_label(lv_obj_t *parent)
 
     snprintf(time_buf, sizeof(time_buf), "%02d:%02d:%02d",
              timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+    if(time_buf[0] == '0' && time_buf[1] == '0' && time_buf[3] == '0' && time_buf[4] == '0' && time_buf[6] == '0' && time_buf[7] == '0') {
+        bmi160_reset_step_counter();
+    }
 
     snprintf(date_buf, sizeof(date_buf), "%s, %02d %s %04d",
              weekday_names[timeinfo->tm_wday],
