@@ -14,6 +14,7 @@
 
 
 
+
 LOG_MODULE_REGISTER(display_app);
 
 
@@ -22,6 +23,7 @@ lv_obj_t *hr_label = NULL;
 lv_obj_t *steps_label = NULL;
 lv_obj_t *time_label = NULL;
 display_view_t current_view;
+static lv_obj_t *distance_label = NULL;
 lv_timer_t *display_timer = NULL;
 static lv_timer_t *time_update_timer = NULL;  // Dodat tajmer za ažuriranje vremena
 lv_obj_t *hr_icon = NULL;
@@ -58,6 +60,7 @@ void reset(void) {
     
     lv_obj_fade_out(steps_label, 1000, 0);
     lv_obj_fade_out(steps_icon, 1000, 0);
+    lv_obj_fade_out(distance_label, 1000, 0);
     
     lv_obj_fade_out(time_label, 1000, 0);
     k_sleep(K_MSEC(1000));
@@ -120,57 +123,98 @@ void stop_hr_icon_blinking(void)
 }
 
 
+void anim_icon_cb(void * var, int32_t v) {
+    lv_obj_set_x((lv_obj_t *)var, v);
+}
+
+void start_icon_wiggle_animation() {
+    static lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, steps_icon);
+    lv_anim_set_exec_cb(&a, anim_icon_cb);
+
+    // Fiksiramo baznu X poziciju
+    int16_t base_x =  -40; // ista kao kod lv_obj_align(..., -40, 0)
+    
+    lv_anim_set_values(&a, base_x - 3, base_x + 3);  // Pomeraj +-3 piksela
+    lv_anim_set_time(&a, 500);
+    lv_anim_set_playback_time(&a, 500);
+    lv_anim_set_repeat_count(&a,LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_repeat_delay(&a, 100);
+    lv_anim_start(&a);
+}
+
+
 
 void init_lcd_display(void)
 {
     const struct device *display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+    
     if (!device_is_ready(display_dev)) {
         LOG_ERR("Display not ready");
         return;
     }
+
+    // Create blink timer for HR icon
     blink_timer = lv_timer_create(hr_icon_blink_cb, 500, NULL); // 500 ms = 0.5s
 
+    // Initialize default style
     static lv_style_t style;
     lv_style_init(&style);
     lv_style_set_text_font(&style, &lv_font_montserrat_14);
 
+    // Heart rate label
     hr_label = lv_label_create(lv_scr_act());
     lv_obj_add_style(hr_label, &style, 0);
     lv_obj_align(hr_label, LV_ALIGN_CENTER, 0, 0);
     lv_label_set_text(hr_label, "HR: --");
 
-    steps_label = lv_label_create(lv_scr_act());
-    lv_obj_add_style(steps_label, &style, 0);
-    lv_obj_align(steps_label, LV_ALIGN_CENTER, 10, 0);
-    lv_label_set_text(steps_label, "Steps: --");
-    lv_obj_add_flag(steps_label, LV_OBJ_FLAG_HIDDEN);
-
-    time_label = lv_label_create(lv_scr_act());
-    lv_obj_add_style(time_label, &style, 0);
-    lv_obj_align(time_label, LV_ALIGN_CENTER, 0,0);
-    lv_label_set_text(time_label, "");
-    lv_obj_add_flag(time_label, LV_OBJ_FLAG_HIDDEN);
-
-        // HR ikonica
-    hr_icon = lv_img_create(lv_scr_act());
-    lv_img_set_src(hr_icon, &Sprite_heart);
-    lv_obj_align(hr_icon, LV_ALIGN_CENTER, -30, 0); // Podesi poziciju ručno
-    lv_obj_align(hr_label, LV_ALIGN_CENTER, 0, 0);
-    // lv_obj_add_flag(hr_icon, LV_OBJ_FLAG_HIDDEN); // Na početku sakrij
-    
-       // Steps ikonica
+    // Steps icon
     steps_icon = lv_img_create(lv_scr_act());
     lv_img_set_src(steps_icon, &icons8_shoe_print_30);
     lv_obj_align(steps_icon, LV_ALIGN_CENTER, -40, 0); 
-    lv_obj_add_flag(steps_icon, LV_OBJ_FLAG_HIDDEN); // Na početku sakrij
+    lv_obj_add_flag(steps_icon, LV_OBJ_FLAG_HIDDEN);
 
-        // Bluetooth label
+    // Steps label
+    steps_label = lv_label_create(lv_scr_act());
+    lv_obj_add_style(steps_label, &style, 0);
+    lv_obj_align_to(steps_label, steps_icon, LV_ALIGN_OUT_RIGHT_MID, 5, 0);
+    lv_label_set_text(steps_label, "Steps: --");
+    lv_obj_add_flag(steps_label, LV_OBJ_FLAG_HIDDEN);
+
+    // Distance label (sa manjim fontom)
+    static lv_style_t distance_style;
+    lv_style_init(&distance_style);
+    lv_style_set_text_font(&distance_style, &lv_font_montserrat_12);  // manji font
+
+    distance_label = lv_label_create(lv_scr_act());
+    lv_obj_add_style(distance_label, &distance_style, 0);
+    lv_obj_align_to(distance_label, steps_icon, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 3); // ispod ikonice
+    lv_label_set_text(distance_label, "Distance: -- m");
+    lv_obj_add_flag(distance_label, LV_OBJ_FLAG_HIDDEN);
+
+
+    // Time label
+    time_label = lv_label_create(lv_scr_act());
+    lv_obj_add_style(time_label, &style, 0);
+    lv_obj_align(time_label, LV_ALIGN_CENTER, 0, 0);
+    lv_label_set_text(time_label, "");
+    lv_obj_add_flag(time_label, LV_OBJ_FLAG_HIDDEN);
+
+    // HR icon
+    hr_icon = lv_img_create(lv_scr_act());
+    lv_img_set_src(hr_icon, &Sprite_heart);
+    lv_obj_align(hr_icon, LV_ALIGN_CENTER, -30, 0);
+    lv_obj_align(hr_label, LV_ALIGN_CENTER, 0, 0);
+
+
+
+    // Bluetooth label
     bt_label = lv_label_create(lv_scr_act());
     lv_label_set_text(bt_label, LV_SYMBOL_BLUETOOTH);
     lv_obj_align(bt_label, LV_ALIGN_TOP_LEFT, 2, 2);
     lv_obj_add_style(bt_label, &style, 0);
-    lv_obj_add_flag(bt_label, LV_OBJ_FLAG_HIDDEN);  // Na početku sakrij
-
+    lv_obj_add_flag(bt_label, LV_OBJ_FLAG_HIDDEN);
 
     // Battery label
     battery_label = lv_label_create(lv_scr_act());
@@ -178,11 +222,11 @@ void init_lcd_display(void)
     lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -2, 2);
     lv_obj_add_style(battery_label, &style, 0);
 
-
-
+    // Create timers
     display_timer = lv_timer_create(timer_callback, 3000, NULL);
-    time_update_timer = lv_timer_create(update_time_callback, 1000, NULL);  // Ažuriraj vreme svake sekunde
+    time_update_timer = lv_timer_create(update_time_callback, 1000, NULL); // Update time every second
 
+    // Initialize display
     lv_task_handler();
     display_blanking_off(display_dev);
 }
@@ -247,20 +291,28 @@ void update_lcd_display(uint32_t hr, uint32_t steps)
     }
     
     if (steps != 0) {
-        
         snprintf(steps_text, sizeof(steps_text), "Steps: %d", steps);
         lv_label_set_text(steps_label, steps_text);
-        if(steps>100 && steps<1000){
-            lv_obj_align(steps_icon, LV_ALIGN_CENTER, -45, 0); // Podesi poziciju ručno
+    
+        float distance = steps * 0.78f; // metri
+        char distance_text[64];
+        if (distance >= 1000.0f) {
+            snprintf(distance_text, sizeof(distance_text), "Distance: %.2f km", distance / 1000.0f);
+        } else {
+            snprintf(distance_text, sizeof(distance_text), "Distance: %.0f m", distance);
         }
-        else if(steps>=1000 && steps<10000){
-            lv_obj_align(steps_icon, LV_ALIGN_CENTER, -50, 0); // Podesi poziciju ručno
+        lv_label_set_text(distance_label, distance_text);
+    
+        // Poravnanje ikonice
+        if(steps > 100 && steps < 1000){
+            lv_obj_align(steps_icon, LV_ALIGN_CENTER, -45, 0);
+        } else if(steps >= 1000 && steps < 10000){
+            lv_obj_align(steps_icon, LV_ALIGN_CENTER, -50, 0);
+        } else if(steps > 10000){
+            lv_obj_align(steps_icon, LV_ALIGN_CENTER, -55, 0);
         }
-        else if(steps>10000){
-            lv_obj_align(steps_icon, LV_ALIGN_CENTER, -55, 0); // Podesi poziciju ručno
-        }
-            
     }
+    
     
     lv_task_handler();
 }
@@ -283,8 +335,10 @@ static void hide_all_views(void)
 
     lv_obj_add_flag(steps_label, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(steps_icon, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(distance_label, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_add_flag(time_label, LV_OBJ_FLAG_HIDDEN);
+
 }
 
 // Pomoćna funkcija za prikaz trenutnog prikaza
@@ -300,6 +354,8 @@ static void show_current_view(void)
         case DISPLAY_STEPS:
             lv_obj_clear_flag(steps_label, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(steps_icon, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(distance_label, LV_OBJ_FLAG_HIDDEN);
+            start_icon_wiggle_animation();
             break;
 
         case DISPLAY_TIME:
@@ -357,7 +413,7 @@ void set_display_view(const char *command)
     if (command == NULL) return;
 
     if (strcmp(command, "slider") == 0) {
-        // Automatski mod - timer nastavlja da radi
+        // Automatski mod - timer nastavlja da radis
         return;
     }
 

@@ -15,3 +15,5 @@ target_sources(app PRIVATE
     src/bluetooth/ble_nus.c
     src/bluetooth/ble_service.c
 )
+target_sources(app PRIVATE src/watchdog.c)
+

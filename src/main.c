@@ -19,6 +19,7 @@
 #include "ble_service.h"
 #include "ble_nus.h"
 #include "ble_hrs.h"
+#include "watchdog.h"
 
 // ---------------------------------
 // Konstante i globalne promenljive
@@ -118,6 +119,11 @@ void main(void)
         printk("Sensor init failed!\n");
         return;
     }
+
+    watchdog_init();
+
+
+    
 
     // ----------------------
     // Kreiranje thread-ova

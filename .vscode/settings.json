@@ -4,6 +4,7 @@
         "sensor.h": "c",
         "reboot.h": "c",
         "bluetooth.h": "c",
-        "max30101.h": "c"
+        "max30101.h": "c",
+        "watchdog.h": "c"
     }
 }
