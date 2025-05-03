@@ -10,7 +10,7 @@
     aliases {
         max30101 = &max30101;
         bmi160 = &bmi160;
-
+                                    
     };
 
 };

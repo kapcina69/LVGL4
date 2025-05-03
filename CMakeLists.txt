@@ -2,6 +2,13 @@
 cmake_minimum_required(VERSION 3.20.0)
 set(SHIELD ssd1306_128x64)
 
+set(BOARD_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+set(CONF_FILE prj.conf)
+set(CONFIG_BOOTLOADER_MCUBOOT y)
+
+
+
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(LGVL4)
 include_directories(
