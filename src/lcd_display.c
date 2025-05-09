@@ -1,5 +1,6 @@
 #include "lcd_display.h"
 #include "rtc_driver.h"
+#include "battery_monitor.h"
 #include <stdlib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
@@ -31,6 +32,10 @@ lv_obj_t *steps_icon = NULL;
 static lv_obj_t *time_icon = NULL; 
 lv_obj_t *bt_label = NULL;
 static lv_obj_t *battery_label = NULL;
+static lv_obj_t *battery_label3 = NULL;
+static lv_obj_t *battery_label2 = NULL;
+static lv_obj_t *battery_label1 = NULL;
+static lv_obj_t *battery_percent_label = NULL;
 static lv_timer_t *blink_timer;
 static bool hr_icon_visible = true;
 int display_timer_period = 3000; // Period za prebacivanje prikaza
@@ -222,6 +227,37 @@ void init_lcd_display(void)
     lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -2, 2);
     lv_obj_add_style(battery_label, &style, 0);
 
+    battery_label3 = lv_label_create(lv_scr_act());
+    lv_label_set_text(battery_label3, LV_SYMBOL_BATTERY_3);
+    lv_obj_align(battery_label3, LV_ALIGN_TOP_RIGHT, -2, 2);
+    lv_obj_add_style(battery_label3, &style, 0);
+
+    battery_label2 = lv_label_create(lv_scr_act());
+    lv_label_set_text(battery_label2, LV_SYMBOL_BATTERY_2);
+    lv_obj_align(battery_label2, LV_ALIGN_TOP_RIGHT, -2, 2);
+    lv_obj_add_style(battery_label2, &style, 0);
+   
+    battery_label1 = lv_label_create(lv_scr_act());
+    lv_label_set_text(battery_label1, LV_SYMBOL_BATTERY_1);
+    lv_obj_align(battery_label1, LV_ALIGN_TOP_RIGHT, -2, 2);
+    lv_obj_add_style(battery_label1, &style, 0);
+    lv_obj_add_flag(battery_label1, LV_OBJ_FLAG_HIDDEN);
+
+
+
+
+    char percentage1[4];
+    battery_percent_label = lv_label_create(lv_scr_act());
+    snprintf(percentage1, sizeof(percentage1), "%d%%", percentage);
+    static lv_style_t percentage_style;
+    lv_style_init(&percentage_style);
+    lv_style_set_text_font(&percentage_style, &lv_font_montserrat_12);  // manji font
+
+    lv_label_set_text(battery_percent_label, percentage1);
+    lv_obj_align(battery_percent_label, LV_ALIGN_TOP_RIGHT, -25, 2);
+    lv_obj_add_style(battery_percent_label, &percentage_style, 0);
+
+
     // Create timers
     display_timer = lv_timer_create(timer_callback, 3000, NULL);
     time_update_timer = lv_timer_create(update_time_callback, 1000, NULL); // Update time every second
@@ -282,7 +318,7 @@ void update_lcd_display(uint32_t hr, uint32_t steps)
     char steps_text[64];
     
 
-
+    
     if (hr != 0) {
         snprintf(hr_text, sizeof(hr_text), "HR: %dbpm", hr);
         lv_label_set_text(hr_label, hr_text);

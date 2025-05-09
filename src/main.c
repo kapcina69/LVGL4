@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <nrfx_saadc.h>
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
@@ -20,6 +21,7 @@
 #include "ble_nus.h"
 #include "ble_hrs.h"
 #include "watchdog.h"
+#include "battery_monitor.h"
 
 // ---------------------------------
 // Konstante i globalne promenljive
@@ -121,7 +123,7 @@ void main(void)
     }
 
     watchdog_init();
-
+    battery_monitor_init();
 
     
 
@@ -156,6 +158,8 @@ void main(void)
     // Glavna petlja
     // ----------------------
     while (1) {
+        battery_monitor_process();
+
         // Reset komanda sa proširenom funkcionalnošću
         if (strlen(received_data_from_bluetooth) > 0) {
             printk("Primljena Bluetooth komanda: %s\n", received_data_from_bluetooth);
