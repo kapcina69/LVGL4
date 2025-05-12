@@ -58,6 +58,7 @@ int voltage_to_percent(int battery_mv)
 void battery_monitor_process(void)
 {
     static uint32_t count = 0;
+    static int32_t last_percentage = -1;  // Pamti poslednji procenat
     int err;
     uint16_t buf;
     struct adc_sequence sequence = {
@@ -70,35 +71,59 @@ void battery_monitor_process(void)
         return;
     }
 
-    printk("=== Measurement #%u ===\n", count++);
-
-    int32_t battery_raw = 0, battery_mv = 0;
+    int32_t battery_raw_sum = 0, battery_raw = 0;
+    int32_t battery_mv = 0;
     float battery_voltage = 0.0f;
 
-    (void)adc_sequence_init_dt(&adc_channels[0], &sequence);
-    err = adc_read_dt(&adc_channels[0], &sequence);
-    if (err < 0) {
-        printk("Battery voltage read error: %d\n", err);
-    } else {
-        battery_raw = (int32_t)buf;
-        battery_mv = (battery_raw * ADC_REF_VOLTAGE_MV) / ADC_MAX_VALUE;
-        battery_voltage = (float)battery_mv / 1000.0f * VOLTAGE_DIVIDER_RATIO;
-
-        printk("Battery voltage (raw): %" PRId32 " mV\n", battery_mv);
-        printk("Raw ADC value: %" PRId32 "\n", battery_raw);
-
-        if (battery_mv >= VOLTAGE_FULL) {
-            printk("Status: Fully charged (100%%)\n");
-            percentage = 100;
-        } else if (battery_mv >= VOLTAGE_LOW) {
-            percentage = voltage_to_percent(battery_mv * VOLTAGE_DIVIDER_RATIO);
-            printk("Status: Good (%" PRId32 "%%)\n", percentage);
-        } else if (battery_mv >= CHARGING_THRESHOLD_MV) {
-            percentage = voltage_to_percent(battery_mv * VOLTAGE_DIVIDER_RATIO);
-            printk("Status: Low (%" PRId32 "%%)\n", percentage);
-        } else {
-            printk("Status: CRITICAL! (0%%)\n");
+    for (int i = 0; i < 50; i++) {
+        (void)adc_sequence_init_dt(&adc_channels[0], &sequence);
+        err = adc_read_dt(&adc_channels[0], &sequence);
+        if (err < 0) {
+            printk("Battery voltage read error (sample %d): %d\n", i, err);
+            continue;
         }
+        battery_raw_sum += (int32_t)buf;
+    }
+
+    battery_raw = battery_raw_sum / 50;
+    battery_mv = (battery_raw * ADC_REF_VOLTAGE_MV) / ADC_MAX_VALUE;
+    battery_voltage = (float)battery_mv / 1000.0f * VOLTAGE_DIVIDER_RATIO;
+
+    int32_t current_percentage;
+
+    if (battery_mv >= VOLTAGE_FULL) {
+        current_percentage = 100;
+    } else if (battery_mv >= VOLTAGE_LOW) {
+        current_percentage = voltage_to_percent(battery_mv * VOLTAGE_DIVIDER_RATIO);
+    } else if (battery_mv >= CHARGING_THRESHOLD_MV) {
+        current_percentage = voltage_to_percent(battery_mv * VOLTAGE_DIVIDER_RATIO);
+    } else {
+        current_percentage = 0;
+    }
+
+    // Ako je procenat isti kao ranije, ne radi ništa
+    if (current_percentage == last_percentage) {
+        return;
+    }
+
+    // Inače, ažuriraj procenat i štampaj podatke
+    last_percentage = current_percentage;
+    percentage = current_percentage;
+
+    printk("=== Measurement #%u ===\n", count++);
+    printk("Battery voltage (avg raw): %" PRId32 " mV\n", battery_mv);
+    printk("Avg raw ADC value: %" PRId32 "\n", battery_raw);
+
+    if (current_percentage == 100) {
+        printk("Status: Fully charged (100%%)\n");
+    } else if (current_percentage > 0) {
+        if (battery_mv >= VOLTAGE_LOW) {
+            printk("Status: Good (%" PRId32 "%%)\n", current_percentage);
+        } else {
+            printk("Status: Low (%" PRId32 "%%)\n", current_percentage);
+        }
+    } else {
+        printk("Status: CRITICAL! (0%%)\n");
     }
 
     int32_t charging_raw = 0, charging_mv = 0;
@@ -123,6 +148,8 @@ void battery_monitor_process(void)
 
     printk("\n");
 }
+
+
 
 void battery_monitor_init(void)
 {
