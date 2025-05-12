@@ -35,6 +35,8 @@ static lv_obj_t *battery_label = NULL;
 static lv_obj_t *battery_label3 = NULL;
 static lv_obj_t *battery_label2 = NULL;
 static lv_obj_t *battery_label1 = NULL;
+lv_obj_t *charging_label = NULL;
+static lv_obj_t *charging_icon = NULL;
 static lv_obj_t *battery_percent_label = NULL;
 static lv_timer_t *blink_timer;
 static bool hr_icon_visible = true;
@@ -244,6 +246,13 @@ void init_lcd_display(void)
     lv_obj_add_flag(battery_label1, LV_OBJ_FLAG_HIDDEN);
 
 
+    // Charging label
+    charging_label = lv_label_create(lv_scr_act());
+    lv_label_set_text(charging_label, LV_SYMBOL_CHARGE);
+    lv_obj_align(charging_label, LV_ALIGN_TOP_RIGHT, -2, 2);
+    lv_obj_add_style(charging_label, &style, 0);
+    lv_obj_add_flag(charging_label, LV_OBJ_FLAG_HIDDEN);
+
 
 
 
@@ -257,11 +266,43 @@ void init_lcd_display(void)
     lv_task_handler();
     display_blanking_off(display_dev);
 }
+void charging_view(void)
+{
+    if(is_charging) {
+        lv_obj_align(battery_percent_label, LV_ALIGN_TOP_RIGHT, -35, 2);
+        lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -12, 2);
+        lv_obj_align(battery_label1, LV_ALIGN_TOP_RIGHT, -12, 2);
+        lv_obj_align(battery_label2, LV_ALIGN_TOP_RIGHT, -12, 2);
+        lv_obj_align(battery_label3, LV_ALIGN_TOP_RIGHT, -12, 2);
+        lv_obj_clear_flag(charging_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_align(charging_label, LV_ALIGN_TOP_RIGHT, -2, 1);
+
+
+    }else{
+        lv_obj_add_flag(charging_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_align(battery_percent_label, LV_ALIGN_TOP_RIGHT, -25, 2);
+        lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -2, 2);
+        lv_obj_align(battery_label1, LV_ALIGN_TOP_RIGHT, -2, 2);
+        lv_obj_align(battery_label2, LV_ALIGN_TOP_RIGHT, -2, 2);
+        lv_obj_align(battery_label3, LV_ALIGN_TOP_RIGHT, -2, 2);
+    } 
+
+
+}
 
 void show_battery(int percentage)
 {
+    if(is_charging) {
+
+        charging_view();
+
+    }else{
+        lv_obj_add_flag(charging_label, LV_OBJ_FLAG_HIDDEN);
+
+    }
+   
     static int last_percentage = -1;
-    if (percentage == last_percentage) {
+    if (percentage == last_percentage ) {
         return;  // Ako je isti procenat, ne radi ništa
     }
     last_percentage = percentage;
@@ -276,6 +317,10 @@ void show_battery(int percentage)
 
     lv_label_set_text(battery_percent_label, percentage1);
     lv_obj_align(battery_percent_label, LV_ALIGN_TOP_RIGHT, -25, 2);
+    lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -2, 2);
+    lv_obj_align(battery_label1, LV_ALIGN_TOP_RIGHT, -2, 2);
+    lv_obj_align(battery_label2, LV_ALIGN_TOP_RIGHT, -2, 2);
+    lv_obj_align(battery_label3, LV_ALIGN_TOP_RIGHT, -2, 2);
     lv_obj_add_style(battery_percent_label, &percentage_style, 0);
 
     if (percentage >= 75) {
@@ -414,10 +459,19 @@ static void hide_all_views(void)
 
 }
 
+
+
 // Pomoćna funkcija za prikaz trenutnog prikaza
 static void show_current_view(void)
 {
     show_battery(percentage);
+    if(!is_charging) {
+        lv_obj_align(battery_percent_label, LV_ALIGN_TOP_RIGHT, -25, 2);
+        lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -2, 2);
+        lv_obj_align(battery_label1, LV_ALIGN_TOP_RIGHT, -2, 2);
+        lv_obj_align(battery_label2, LV_ALIGN_TOP_RIGHT, -2, 2);
+        lv_obj_align(battery_label3, LV_ALIGN_TOP_RIGHT, -2, 2);   
+    }
     switch (current_view) {
         case DISPLAY_HR:
             lv_obj_clear_flag(hr_label, LV_OBJ_FLAG_HIDDEN);
@@ -459,12 +513,19 @@ static void set_display_view_async(void *param)
 
     if (strcmp(cmd->command, "steps") == 0) {
         current_view = DISPLAY_STEPS;
+        lv_timer_pause(display_timer); 
+
+
     }
     else if (strcmp(cmd->command, "time") == 0) {
         current_view = DISPLAY_TIME;
+        lv_timer_pause(display_timer); 
+
     }
     else if (strcmp(cmd->command, "hr") == 0) {
         current_view = DISPLAY_HR;
+        lv_timer_pause(display_timer); 
+
     }
     else {
         valid = false;
@@ -487,9 +548,13 @@ void set_display_view(const char *command)
     if (command == NULL) return;
 
     if (strcmp(command, "slider") == 0) {
+        lv_timer_resume(display_timer); 
+
         // Automatski mod - timer nastavlja da radis
         return;
     }
+
+    
 
     // Alociramo podatke za asinhroni poziv
     DisplayCommand *cmd = malloc(sizeof(DisplayCommand));

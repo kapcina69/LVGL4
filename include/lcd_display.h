@@ -28,6 +28,7 @@ void init_lcd_display(void);
 void update_lcd_display(uint32_t hr, uint32_t steps);
 void reset(void);
 void change_display_view(char *message);
+void charging_view(void);
 
 // Two versions of switch_display_view:
 void switch_display_view(lv_timer_t *timer); // For timer callback

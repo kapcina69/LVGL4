@@ -58,7 +58,7 @@ int voltage_to_percent(int battery_mv)
 void battery_monitor_process(void)
 {
     static uint32_t count = 0;
-    static int32_t last_percentage = -1;  // Pamti poslednji procenat
+    static int32_t last_percentage = 101;  // Pamti poslednji procenat
     int err;
     uint16_t buf;
     struct adc_sequence sequence = {
@@ -100,10 +100,29 @@ void battery_monitor_process(void)
     } else {
         current_percentage = 0;
     }
+       int32_t charging_raw = 0, charging_mv = 0;
+
+    (void)adc_sequence_init_dt(&adc_channels[1], &sequence);
+    err = adc_read_dt(&adc_channels[1], &sequence);
+    if (err < 0) {
+        printk("Charging status read error: %d\n", err);
+    } else {
+        charging_raw = (int32_t)buf;
+        charging_mv = (charging_raw * ADC_REF_VOLTAGE_MV) / ADC_MAX_VALUE;
+
+        is_charging = charging_mv > CHARGING_THRESHOLD_MV;
+        printk("Charging status: %s\n", is_charging ? "CHARGING" : "NOT CHARGING");
+  
+    }
+
+    printk("\n");
 
     // Ako je procenat isti kao ranije, ne radi ništa
-    if (current_percentage == last_percentage) {
+    if (current_percentage >= last_percentage && last_percentage != 0) {
         return;
+    }
+    if(last_percentage == 0 && current_percentage == 0) {
+        return;  // Ako je procenat 0, ne radi ništa
     }
 
     // Inače, ažuriraj procenat i štampaj podatke
@@ -126,27 +145,7 @@ void battery_monitor_process(void)
         printk("Status: CRITICAL! (0%%)\n");
     }
 
-    int32_t charging_raw = 0, charging_mv = 0;
-
-    (void)adc_sequence_init_dt(&adc_channels[1], &sequence);
-    err = adc_read_dt(&adc_channels[1], &sequence);
-    if (err < 0) {
-        printk("Charging status read error: %d\n", err);
-    } else {
-        charging_raw = (int32_t)buf;
-        charging_mv = (charging_raw * ADC_REF_VOLTAGE_MV) / ADC_MAX_VALUE;
-
-        is_charging = charging_mv > CHARGING_THRESHOLD_MV;
-        printk("Charging status: %s\n", is_charging ? "CHARGING" : "NOT CHARGING");
-        printk("Charging pin raw: %" PRId32 " (%" PRId32 " mV)\n", charging_raw, charging_mv);
-
-        if (is_charging) {
-            printk("Charging current: %.2f A\n",
-                   (float)(charging_mv - CHARGING_THRESHOLD_MV) / 1000.0f);
-        }
-    }
-
-    printk("\n");
+ 
 }
 
 

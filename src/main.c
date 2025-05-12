@@ -33,6 +33,7 @@ static int buffer_index = 0;
 
 char *received_data_from_bluetooth;
 bool value_nrf_connect = false;
+bool value_nrf_connect2 = false;
 
 // ------------------------------
 // Definisanje thread stack-ova
@@ -86,12 +87,14 @@ void handle_received_data(const char *data)
     printk("App received: %s\n", data);
     received_data_from_bluetooth = data;
     value_nrf_connect = true;
+    value_nrf_connect2 = true;
 }
 
 
 void main(void) 
 {
     received_data_from_bluetooth = "";  // Inicijalizacija na prazan string
+    char* last_command = "5";
 
     // ----------------------
     // Inicijalizacija sistema
@@ -159,11 +162,11 @@ void main(void)
     // ----------------------
     while (1) {
         battery_monitor_process();
+        // printk("received_data_from_bluetooth: %s\n", received_data_from_bluetooth);
 
-        // Reset komanda sa proširenom funkcionalnošću
-        if (strlen(received_data_from_bluetooth) > 0) {
+        if (strlen(received_data_from_bluetooth) > 0 && strcmp(received_data_from_bluetooth, last_command) != 0) {
             printk("Primljena Bluetooth komanda: %s\n", received_data_from_bluetooth);
-            
+
             if (strcmp(received_data_from_bluetooth, "reset") == 0) {
                 printk("Reset komanda primljena - pokrećem reset\n");
                 reset();
@@ -177,36 +180,44 @@ void main(void)
                     printk("Greška pri resetovanju brojača koraka: %d\n", ret);
                 }
                 received_data_from_bluetooth = "";
-            }
+            } 
             else if (strncmp(received_data_from_bluetooth, "displaytime:", 12) == 0) {
                 printk("Komanda za promenu vremena prikaza\n");
                 change_display_view(received_data_from_bluetooth);
                 received_data_from_bluetooth = "";
-            }else if (strcmp(received_data_from_bluetooth, "steps") == 0) {
-                set_display_view("steps");
-            }
-            else if (strcmp(received_data_from_bluetooth, "time") == 0) {
-                set_display_view("time");
-            }
-            // ... other commands
-            else if (strcmp(received_data_from_bluetooth, "hr") == 0) {
-                set_display_view("hr");
-            }
-            else if(strcmp(received_data_from_bluetooth, "slider") == 0) {
-                set_display_view("slider");
-            }else if (value_nrf_connect == true) {
+            } 
+            else if (
+                strcmp(received_data_from_bluetooth, "steps") == 0 ||
+                strcmp(received_data_from_bluetooth, "time") == 0 ||
+                strcmp(received_data_from_bluetooth, "hr") == 0 ||
+                strcmp(received_data_from_bluetooth, "slider") == 0
+            ) {
+                if(value_nrf_connect2 == true) {
+                    value_nrf_connect2 = false;
+                    printk("Primljena komanda za promenu prikaza: %s\n", received_data_from_bluetooth);
+                    set_display_view(received_data_from_bluetooth);
+                    received_data_from_bluetooth = "";
+
+                }
+            } 
+            else if (value_nrf_connect == true) {
                 rtc_set_initial_time(received_data_from_bluetooth);
                 value_nrf_connect = false;
                 received_data_from_bluetooth = "Cekam komandu";
-            }else if(strcmp(received_data_from_bluetooth, "Cekam komandu") == 0) {
+            } 
+            else if (strcmp(received_data_from_bluetooth, "Cekam komandu") == 0) {
                 printk("Cekam komandu\n");
-            }
-            
+            } 
             else {
                 printk("Nepoznata komanda: %s\n", received_data_from_bluetooth);
                 received_data_from_bluetooth = "";
             }
+            for(int i = 0; i < strlen(received_data_from_bluetooth); i++) {
+                last_command[i] = received_data_from_bluetooth[i];
+            }
         }
+
+        
 
         // Ako je primljeno vreme putem BLE
         
