@@ -245,6 +245,14 @@ void init_lcd_display(void)
     lv_obj_add_style(battery_label1, &style, 0);
     lv_obj_add_flag(battery_label1, LV_OBJ_FLAG_HIDDEN);
 
+    // Battery percent label
+    battery_percent_label = lv_label_create(lv_scr_act());
+    lv_obj_add_style(battery_percent_label, &style, 0); // koristi stil koji već koristiš za tekst
+    lv_label_set_text(battery_percent_label, "100%");
+    lv_obj_align(battery_percent_label, LV_ALIGN_TOP_RIGHT, -25, 2);
+    lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN); // Sakrij dok ne treba
+
+
 
     // Charging label
     charging_label = lv_label_create(lv_scr_act());
@@ -266,10 +274,11 @@ void init_lcd_display(void)
     lv_task_handler();
     display_blanking_off(display_dev);
 }
+
 void charging_view(void)
 {
     if(is_charging) {
-        lv_obj_align(battery_percent_label, LV_ALIGN_TOP_RIGHT, -35, 2);
+        lv_obj_align(battery_percent_label, LV_ALIGN_TOP_RIGHT, -34, 2);
         lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -12, 2);
         lv_obj_align(battery_label1, LV_ALIGN_TOP_RIGHT, -12, 2);
         lv_obj_align(battery_label2, LV_ALIGN_TOP_RIGHT, -12, 2);
@@ -292,36 +301,24 @@ void charging_view(void)
 
 void show_battery(int percentage)
 {
-    if(is_charging) {
-
-        charging_view();
-
-    }else{
-        lv_obj_add_flag(charging_label, LV_OBJ_FLAG_HIDDEN);
-
-    }
-   
+    charging_view();
+    
     static int last_percentage = -1;
-    if (percentage == last_percentage ) {
+    if (percentage == last_percentage || percentage == last_percentage+1 || percentage == last_percentage+2) {
+        printk("Battery percentage unchanged: %d\n", percentage);
         return;  // Ako je isti procenat, ne radi ništa
     }
     last_percentage = percentage;
     lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
 
     char percentage1[4];
-    battery_percent_label = lv_label_create(lv_scr_act());
     snprintf(percentage1, sizeof(percentage1), "%d%%", percentage);
     static lv_style_t percentage_style;
     lv_style_init(&percentage_style);
     lv_style_set_text_font(&percentage_style, &lv_font_montserrat_12);  // manji font
-
+    lv_obj_clear_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN); // obavezno prikaži labelu
+    printk("Battery percentage: %d\n", percentage);
     lv_label_set_text(battery_percent_label, percentage1);
-    lv_obj_align(battery_percent_label, LV_ALIGN_TOP_RIGHT, -25, 2);
-    lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -2, 2);
-    lv_obj_align(battery_label1, LV_ALIGN_TOP_RIGHT, -2, 2);
-    lv_obj_align(battery_label2, LV_ALIGN_TOP_RIGHT, -2, 2);
-    lv_obj_align(battery_label3, LV_ALIGN_TOP_RIGHT, -2, 2);
-    lv_obj_add_style(battery_percent_label, &percentage_style, 0);
 
     if (percentage >= 75) {
         lv_obj_clear_flag(battery_label, LV_OBJ_FLAG_HIDDEN);

@@ -8,7 +8,8 @@ typedef enum {
     DISPLAY_HR,
     DISPLAY_STEPS,
     DISPLAY_TIME,
-    DISPLAY_COUNT
+    DISPLAY_COUNT,
+    DISPLAY_ALL
 } display_view_t;
 
 // External variables

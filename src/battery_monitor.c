@@ -117,13 +117,13 @@ void battery_monitor_process(void)
 
     printk("\n");
 
-    // Ako je procenat isti kao ranije, ne radi ništa
-    if (current_percentage >= last_percentage && last_percentage != 0) {
-        return;
-    }
-    if(last_percentage == 0 && current_percentage == 0) {
-        return;  // Ako je procenat 0, ne radi ništa
-    }
+    // // Ako je procenat isti kao ranije, ne radi ništa
+    // if (current_percentage >= last_percentage && last_percentage != 0) {
+    //     return;
+    // }
+    // if(last_percentage == 0 && current_percentage == 0) {
+    //     return;  // Ako je procenat 0, ne radi ništa
+    // }
 
     // Inače, ažuriraj procenat i štampaj podatke
     last_percentage = current_percentage;
